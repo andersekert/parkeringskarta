@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Parkering">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#1f5f4a">
+<title>Parkeringskarta Stockholm</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --bg:#f4f5f2; --panel:#ffffff; --fg:#1d2420; --muted:#5d6862; --line:#d9ddd6;
+  --accent:#1f5f4a; --accent-fg:#ffffff;
+  --forbid:#c0392b; --allow:#1e8e5a; --taxa:#2a6fb0; --boende:#d98e04; --other:#7a4fb0;
+  --warn-bg:#fff3d6; --warn-fg:#5a4300;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#121614; --panel:#1c211e; --fg:#e8ece9; --muted:#9aa59f; --line:#2f3732;
+  --accent:#5fc3a0; --accent-fg:#0d1511;
+  --forbid:#ff6b5a; --allow:#4fd18c; --taxa:#6aaef0; --boende:#f0b73c; --other:#b99af0;
+  --warn-bg:#3a2f10; --warn-fg:#f2d98a;
+}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--fg);overflow:hidden}
+#map{position:absolute;inset:0}
+.top{position:absolute;z-index:1000;top:0;left:0;right:0;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) 0 max(10px,env(safe-area-inset-left));pointer-events:none}
+.bar{display:flex;gap:6px;pointer-events:auto;max-width:560px}
+.bar input{flex:1;min-width:0;font:inherit;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--fg);box-shadow:0 2px 8px rgba(0,0,0,.18)}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--fg);padding:10px 12px}
+button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:600}
+.bar button{box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.sheet{position:absolute;z-index:1000;left:0;right:0;bottom:0;max-width:560px;background:var(--panel);border-top:1px solid var(--line);border-radius:14px 14px 0 0;padding:12px max(14px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left));box-shadow:0 -4px 16px rgba(0,0,0,.18);max-height:55%;overflow:auto}
+.sheet h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;font-weight:600}
+.layers{display:flex;flex-direction:column;gap:4px}
+.layers label{display:flex;align-items:center;gap:8px;min-height:28px}
+.sw{display:inline-block;width:14px;height:14px;min-width:14px;min-height:14px;border-radius:3px;flex:none;border:1px solid rgba(0,0,0,.25)}
+.cnt{margin-left:auto;color:var(--muted);font-variant-numeric:tabular-nums;font-size:13px}
+.status{margin:8px 0 0;color:var(--muted);font-size:13px}
+.err{margin:8px 0 0;padding:8px 10px;border-radius:8px;background:var(--warn-bg);color:var(--warn-fg);font-size:13px}
+.row{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.key{display:flex;gap:6px;margin-top:6px}
+.key input{flex:1;min-width:0;font:inherit;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)}
+details{margin-top:8px;font-size:13px;color:var(--muted)}
+details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:12px}
+.note{font-size:12px;color:var(--muted);margin:8px 0 0}
+.leaflet-popup-content{font:13px/1.4 system-ui,sans-serif;margin:10px 12px}
+.leaflet-popup-content table{border-collapse:collapse}
+.leaflet-popup-content td{padding:1px 8px 1px 0;vertical-align:top;word-break:break-word}
+.leaflet-popup-content td:first-child{color:#666}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div class="top">
+  <form class="bar" id="searchForm">
+    <input id="q" type="search" placeholder="Sök plats, t.ex. Riksdagen" autocomplete="off" enterkeyhint="search">
+    <button class="primary" type="submit">Sök</button>
+    <button type="button" id="locate" title="Min position" aria-label="Min position">⌖</button>
+  </form>
+</div>
+
+<div class="sheet" id="sheet">
+  <h2>Lager</h2>
+  <div class="layers" id="layers"></div>
+  <div id="vehBox" hidden><h2 style="margin-top:10px">Typ av förbud (enligt beslutets rubrik)</h2><div class="layers" id="veh"></div></div>
+  <p class="status" id="status">Skriv API-nyckel nedan, sök sedan en plats.</p>
+  <div class="err" id="err" hidden></div>
+  <div class="row">
+    <button type="button" id="reload">Sök i kartvyn</button>
+    <button type="button" id="listDec">Lista beslut i vyn</button>
+    <button type="button" id="keyToggle">API-nyckel</button>
+  </div>
+  <div id="keyBox" hidden>
+    <div class="key">
+      <input id="key" type="text" placeholder="API-nyckel från openstreetgs.stockholm.se" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button type="button" class="primary" id="keySave">Spara</button>
+    </div>
+    <p class="note">Nyckeln sparas bara i den här webbläsaren.</p>
+  </div>
+  <details id="diag" open><summary>Detaljer</summary><pre id="diagText"></pre></details>
+  <p class="note">Visar parkeringsföreskrifter ur Trafikkontorets öppna data. Typen (stannande eller parkering) är avläst ur beslutets rubrik och kan vara fel eller saknas. Tillfälliga regler kan saknas. Gäller alltid skylten på platsen. Nyttotillståndet gäller inte vid stannandeförbud.</p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function(){
+  var BASE = 'https://openstreetgs.stockholm.se/geoservice/api/';
+  // Lagernamn enligt tjänstens GetCapabilities (2026-10-20)
+  var DEFS = [
+    {id:'forbjuden', label:'Förbud mot parkering/stannande', names:['ltfr:LTFR_P_FORBUD_GEOM'], color:'--forbid', on:true},
+    {id:'tillaten',  label:'Parkering tillåten',  names:['ltfr:LTFR_P_TILLATEN_GEOM'], color:'--allow', on:true},
+    {id:'taxa',      label:'Taxeområden',         names:['ltfr:LTFR_TAXA_VIEW'], color:'--taxa', on:false},
+    {id:'boende',    label:'Boendeparkering',     names:['ltfr:LTFR_BOENDE'], color:'--boende', on:false, dash:'6 4'},
+    {id:'ovrigt',    label:'Övriga föreskrifter (kan innehålla stannandeförbud)', names:['ltfr:LTFR_FORESKRIFT_GEOM'], color:'--other', on:false}
+  ];
+  var $ = function(id){return document.getElementById(id)};
+  var mem = {}, lsOk = true;
+  var store = {
+    get:function(k){ if(k in mem) return mem[k]; try{ return localStorage.getItem(k); }catch(e){ lsOk = false; return null; } },
+    set:function(k,v){ mem[k] = v; try{ localStorage.setItem(k,v); }catch(e){ lsOk = false; } }
+  };
+  var PAL = {
+    '--forbid':['#c0392b','#ff6b5a'], '--allow':['#1e8e5a','#4fd18c'], '--taxa':['#2a6fb0','#6aaef0'],
+    '--boende':['#d98e04','#f0b73c'], '--other':['#7a4fb0','#b99af0']
+  };
+  function colorOf(d){
+    var dark = false;
+    try{ dark = window.matchMedia('(prefers-color-scheme: dark)').matches; }catch(e){}
+    return PAL[d.color][dark ? 1 : 0];
+  }
+
+  var map = L.map('map',{zoomControl:false}).setView([59.3275,18.0686],15);
+  L.control.zoom({position:'topright'}).addTo(map);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  map.attributionControl.setPrefix('');
+
+  var groups = {}, marker = null, lastBbox = null, busy = false, log = [], raw = {}, rawKey = {}, dec = {}, clsOff = {}, byId = {};
+  DEFS.forEach(function(d){ byId[d.id] = d; });
+  window.addEventListener('error', function(e){ var d = document.getElementById('diagText'); if(d) d.textContent += '\nSkriptfel: ' + e.message + ' (rad ' + e.lineno + ')'; });
+  DEFS.forEach(function(d){ groups[d.id] = L.layerGroup(); });
+
+  function setStatus(t){ $('status').textContent = t; }
+  function showErr(t){ var e = $('err'); if(!t){ e.hidden = true; return; } e.hidden = false; e.textContent = t; }
+  function addLog(t){ log.push(t); $('diagText').textContent = log.join('\n'); }
+  function getKey(){ return (store.get('apikey')||'').trim(); }
+  function maskKey(s){ var k = getKey(); return k ? s.split(k).join('<nyckel>') : s; }
+
+  function setCnt(id, txt){ var e = $('cnt_'+id); if(e) e.textContent = txt; }
+  function syncForb(){ byId.forbjuden.on = Object.keys(CLS).some(function(c){ return !clsOff[c]; }); }
+  function renderToggles(){
+    var box = $('layers'); box.innerHTML = '';
+    clsOff.stanna = true; clsOff.okand = true;
+    ['parkera'].forEach(function(c){
+      var s0 = store.get('cls_'+c); if(s0 !== null) clsOff[c] = (s0 === '0');
+      var l = document.createElement('label');
+      var cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !clsOff[c];
+      cb.addEventListener('change', function(){
+        clsOff[c] = !cb.checked; store.set('cls_'+c, cb.checked ? '1' : '0'); syncForb();
+        var stale = !raw.forbjuden || (lastBbox && rawKey.forbjuden !== lastBbox.join(','));
+        if(byId.forbjuden.on && stale && lastBbox){ loadDef(byId.forbjuden, lastBbox, true); }
+        else if(raw.forbjuden){ draw(byId.forbjuden); }
+        applyVisibility();
+      });
+      var sw = document.createElement('span'); sw.className = 'sw'; sw.style.backgroundColor = clsColor(c);
+      var t = document.createElement('span'); t.textContent = CLS[c].label;
+      var n = document.createElement('span'); n.className = 'cnt'; n.id = 'ccnt_'+c;
+      l.appendChild(cb); l.appendChild(sw); l.appendChild(t); l.appendChild(n); box.appendChild(l);
+    });
+    DEFS.forEach(function(d){
+      if(d.id === 'forbjuden') return;
+      var s = store.get('on_'+d.id); if(s !== null) d.on = s === '1';
+      var l = document.createElement('label');
+      var cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = d.on;
+      cb.addEventListener('change', function(){
+        d.on = cb.checked; store.set('on_'+d.id, d.on ? '1' : '0'); applyVisibility();
+        if(d.on && lastBbox && !groups[d.id].getLayers().length){ loadDef(d, lastBbox, true); }
+      });
+      var sw = document.createElement('span'); sw.className = 'sw'; sw.style.backgroundColor = colorOf(d);
+      var t = document.createElement('span'); t.textContent = d.label;
+      var c2 = document.createElement('span'); c2.className = 'cnt'; c2.id = 'cnt_'+d.id;
+      l.appendChild(cb); l.appendChild(sw); l.appendChild(t); l.appendChild(c2); box.appendChild(l);
+    });
+    syncForb();
+  }
+  function applyVisibility(){
+    DEFS.forEach(function(d){ if(d.on) map.addLayer(groups[d.id]); else map.removeLayer(groups[d.id]); });
+  }
+
+  function url(name, bbox, fmt){
+    return BASE + encodeURIComponent(getKey()) + '/wfs?service=WFS&version=1.0.0&request=GetFeature&srsName=EPSG:4326&maxFeatures=3000'
+      + '&bbox=' + bbox.join(',') + ',EPSG:4326&typeName=' + encodeURIComponent(name) + fmt;
+  }
+
+  // 1) vanligt fetch (kräver CORS)  2) JSONP via script-tagg (kräver inte CORS)
+  function jsonp(u){
+    return new Promise(function(resolve, reject){
+      var cb = 'wfsCb' + Date.now() + Math.floor(Math.random()*1e6);
+      var s = document.createElement('script');
+      var done = false;
+      function cleanup(){ done = true; try{ delete window[cb]; }catch(e){ window[cb] = undefined; } if(s.parentNode) s.parentNode.removeChild(s); }
+      window[cb] = function(data){ if(done) return; cleanup(); resolve(data); };
+      s.onerror = function(){ if(done) return; cleanup(); reject(new Error('Skripttaggen kunde inte laddas')); };
+      setTimeout(function(){ if(done) return; cleanup(); reject(new Error('Tidsgräns (30 s) för skripttagg')); }, 30000);
+      s.src = u + '&outputFormat=text%2Fjavascript&format_options=callback:' + cb;
+      document.head.appendChild(s);
+    });
+  }
+  async function getFeatures(name, bbox){
+    var u = url(name, bbox, '&outputFormat=application%2Fjson');
+    try{
+      var r = await fetch(u);
+      var txt = await r.text();
+      if(!r.ok){ var he = new Error('HTTP '+r.status+' '+txt.slice(0,300)); he.http = true; throw he; }
+      var j = JSON.parse(txt);
+      return {features:j.features||[], via:'fetch'};
+    }catch(e){
+      if(e && e.http) throw e;
+      addLog('fetch misslyckades för '+name+' ('+(e && e.message)+'), provar skripttagg');
+      var data = await jsonp(url(name, bbox, ''));
+      return {features:(data && data.features) || [], via:'skripttagg'};
+    }
+  }
+
+  var CLS = {
+    stanna:{label:'Stannandeförbud: nyttotillståndet gäller inte', pal:['#b00020','#ff5a6e'], dash:null},
+    parkera:{label:'Parkeringsförbud: nyttotillstånd kan gälla', pal:['#e67e22','#ffb15c'], dash:null},
+    okand:{label:'Typ okänd: läs beslutet', pal:['#7f8c8d','#b0bcc0'], dash:'2 6'}
+  };
+  function isDark(){ try{ return window.matchMedia('(prefers-color-scheme: dark)').matches; }catch(e){ return false; } }
+  function clsColor(c){ return CLS[c].pal[isDark() ? 1 : 0]; }
+  function buildDec(){
+    dec = {};
+    (raw.ovrigt || []).forEach(function(f){
+      var p = f.properties || {}, k = String(p.CITATION || '').trim();
+      if(k && !dec[k]) dec[k] = p;
+    });
+  }
+  function classify(props){
+    var d = dec[String((props && props.CITATION) || '').trim()];
+    if(!d) return 'okand';
+    var title = String(d.TITLE || '').toLowerCase();
+    if(/stanna/.test(title)) return 'stanna';
+    if(/parker/.test(title)) return 'parkera';
+    var text = String(d.FORESKRIFTSTEXT || '').toLowerCase();
+    if(/inte\s+(får\s+)?stanna|stanna(s)?\s+(eller|och)\s+parker/.test(text)) return 'stanna';
+    if(/inte\s+(får\s+)?parker|parkering/.test(text)) return 'parkera';
+    return 'okand';
+  }
+  function rdtLink(props, d){
+    var u = props.RDT_URL || d.RDT_URL;
+    if(u && /^https:\/\/rdt\.transportstyrelsen\.se\//.test(u)) return u;
+    var m = /^(\d{4})\s+(\d{4})-(\d+)$/.exec(String(props.CITATION || '').trim());
+    return m ? 'https://rdt.transportstyrelsen.se/rdt/AF06_View.aspx?BeslutsMyndighetKod=' + m[1] + '&BeslutadAr=' + m[2] + '&LopNr=' + m[3] : null;
+  }
+  var HIDE = {FEATURE_VERSION_ID:1,EXTENTGID:1,FID:1,TOOLTIP:1,GEOM_TYPE:1,RDT_URL:1,STREET_NAME:1,CITY_DISTRICT:1,PARKING_DISTRICT:1,TITLE:1,FORESKRIFTSTEXT:1,TRAFIKREGEL_ID:1,LOCATION_APPROX:1,FEATURE_OBJECT_ID:1};
+  var LABEL = {VEHICLE:'Fordon',VALID_FROM:'Gäller från',CITATION:'Beslut',PARKING_RATE:'Avgift',ADDRESS:'Adress',TRAFIKREGEL:'Regeltyp'};
+  function popupHtml(props, cls){
+    props = props || {};
+    var d = dec[String(props.CITATION || '').trim()] || {};
+    var el = document.createElement('div');
+    if(cls){
+      var bd = document.createElement('div');
+      bd.style.cssText = 'margin-bottom:6px;padding:4px 8px;border-radius:6px;color:#fff;font-weight:600;background:' + CLS[cls].pal[0];
+      bd.textContent = CLS[cls].label; el.appendChild(bd);
+    }
+    var h = document.createElement('div'); h.style.fontWeight = '600';
+    h.textContent = props.STREET_NAME || props.LOCATION_APPROX || d.LOCATION_APPROX || props.TOOLTIP || 'Föreskrift'; el.appendChild(h);
+    var title = props.TITLE || d.TITLE;
+    if(title){ var td = document.createElement('div'); td.style.cssText = 'color:#555;font-size:12px'; td.textContent = String(title).replace(/;\s*$/, ''); el.appendChild(td); }
+    var sub = [props.PARKING_DISTRICT, props.CITY_DISTRICT].filter(Boolean).join(', ');
+    if(sub){ var sd = document.createElement('div'); sd.style.color = '#666'; sd.textContent = sub; el.appendChild(sd); }
+    var tb = document.createElement('table');
+    Object.keys(props).forEach(function(k){
+      var v = props[k];
+      if(HIDE[k] || v===null || v==='' || typeof v==='object') return;
+      if(k==='ADDRESS' && /saknas/i.test(String(v))) return;
+      if(k==='VALID_FROM') v = String(v).slice(0,10);
+      var tr = document.createElement('tr');
+      var a1 = document.createElement('td'); a1.textContent = LABEL[k] || k;
+      var b1 = document.createElement('td'); b1.textContent = String(v);
+      tr.appendChild(a1); tr.appendChild(b1); tb.appendChild(tr);
+    });
+    el.appendChild(tb);
+    var text = props.FORESKRIFTSTEXT || d.FORESKRIFTSTEXT;
+    if(text){
+      var tx = document.createElement('div');
+      tx.style.cssText = 'margin-top:6px;padding-top:4px;border-top:1px solid #ddd;max-height:150px;overflow:auto;white-space:pre-wrap;font-size:12px';
+      tx.textContent = String(text).trim(); el.appendChild(tx);
+    }
+    var link = rdtLink(props, d);
+    if(link){
+      var p1 = document.createElement('div'); p1.style.marginTop = '6px';
+      var a2 = document.createElement('a'); a2.href = link; a2.target = '_blank'; a2.rel = 'noopener';
+      a2.textContent = 'Läs beslutet (Transportstyrelsen)'; p1.appendChild(a2); el.appendChild(p1);
+    }
+    return el;
+  }
+  function styleFor(d){
+    var c = colorOf(d);
+    return {color:c, weight:5, opacity:.85, fillColor:c, fillOpacity:.22, dashArray:d.dash||null, lineCap:'round'};
+  }
+
+  function draw(d){
+    groups[d.id].clearLayers();
+    var feats = raw[d.id] || [], shown = feats, isF = d.id === 'forbjuden';
+    if(isF){
+      feats.forEach(function(f){ f._cls = classify(f.properties); });
+      shown = feats.filter(function(f){ return !clsOff[f._cls]; });
+    }
+    L.geoJSON({type:'FeatureCollection',features:shown},{
+      style:function(f){
+        var st = styleFor(d);
+        if(isF && f._cls){ st.color = clsColor(f._cls); st.fillColor = st.color; st.dashArray = CLS[f._cls].dash; }
+        return st;
+      },
+      pointToLayer:function(f,ll){return L.circleMarker(ll,{radius:7,color:colorOf(d),fillColor:colorOf(d),fillOpacity:.6,weight:2})},
+      onEachFeature:function(f,layer){ layer.bindPopup(popupHtml(f.properties, isF ? f._cls : null), {maxWidth:300}); }
+    }).addTo(groups[d.id]);
+    var cnt = $('cnt_'+d.id);
+    if(cnt) cnt.textContent = (shown.length === feats.length) ? String(feats.length) : (shown.length + ' av ' + feats.length);
+  }
+  function renderCls(){
+    var feats = raw.forbjuden || [], counts = {stanna:0, parkera:0, okand:0};
+    feats.forEach(function(f){ counts[f._cls || classify(f.properties)]++; });
+    Object.keys(CLS).forEach(function(c){ var e = $('ccnt_'+c); if(e) e.textContent = String(counts[c]); });
+    addLog('Typ enligt rubrik: stannande ' + counts.stanna + ', parkering ' + counts.parkera + ', okänd ' + counts.okand);
+  }
+  async function ensureDec(bbox){
+    var key = bbox.join(',');
+    if(rawKey.ovrigt === key) return;
+    var res = await getFeatures(byId.ovrigt.names[0], bbox);
+    raw.ovrigt = res.features; rawKey.ovrigt = key; buildDec();
+    addLog('Föreskrifter för typbestämning: ' + res.features.length + ' objekt via ' + res.via);
+  }
+
+  async function loadDef(d, bbox, single){
+    setCnt(d.id, '…');
+    groups[d.id].clearLayers();
+    var key = bbox.join(','), all = [], via = '';
+    try{
+      if(d.id === 'forbjuden'){
+        try{ await ensureDec(bbox); }catch(e){ addLog('Typbestämning misslyckades: ' + maskKey(String(e && e.message || e))); }
+      }
+      if(d.id === 'ovrigt' && rawKey.ovrigt === key){ all = raw.ovrigt; via = 'cache'; }
+      else{
+        for(var i=0;i<d.names.length;i++){
+          var res = await getFeatures(d.names[i], bbox);
+          via = res.via; all = all.concat(res.features);
+        }
+      }
+      raw[d.id] = all; rawKey[d.id] = key;
+      if(d.id === 'ovrigt'){ rawKey.ovrigt = key; buildDec(); }
+      draw(d);
+      if(d.id === 'forbjuden') renderCls();
+      addLog(d.label+': '+all.length+' objekt via '+via);
+      applyVisibility();
+      if(single) setStatus('Klart.');
+      return true;
+    }catch(e){
+      setCnt(d.id, 'fel');
+      addLog(d.label+': '+maskKey(String(e && e.message || e)));
+      return String(e && e.message || e);
+    }
+  }
+
+  async function load(){
+    if(busy) return;
+    addLog('Sök startad. Nyckel: ' + (getKey() ? 'finns' : 'saknas') + ', zoom: ' + map.getZoom());
+    if(!getKey()){ $('keyBox').hidden = false; setStatus('Ange API-nyckel först.'); showErr('API-nyckel saknas. Skriv in den och tryck Spara.'); return; }
+    if(map.getZoom() < 15){ setStatus('Zooma in lite till (minst nivå 15) för att söka i vyn.'); return; }
+    busy = true; showErr(null); setStatus('Hämtar…');
+    var b = map.getBounds();
+    lastBbox = [b.getWest().toFixed(6), b.getSouth().toFixed(6), b.getEast().toFixed(6), b.getNorth().toFixed(6)];
+    DEFS.forEach(function(d){ groups[d.id].clearLayers(); setCnt(d.id, ''); });
+    var firstErr = null, ok = 0;
+    for(var i=0;i<DEFS.length;i++){
+      if(!DEFS[i].on) continue;
+      var r = await loadDef(DEFS[i], lastBbox, false);
+      if(r === true) ok++; else if(!firstErr) firstErr = r;
+    }
+    if(firstErr && !ok){
+      showErr('Inga data hämtades. Både vanligt anrop och skripttagg misslyckades. Öppna Detaljer. Kör du filen i en förhandsvisning? Öppna den i Chrome eller Safari i stället.');
+      $('diag').open = true; setStatus('Misslyckades.');
+    }else if(firstErr){
+      showErr('Något lager misslyckades. Se Detaljer.'); setStatus('Delvis klart.');
+    }else{
+      setStatus('Klart. Tryck på en linje eller yta för att se regler.');
+    }
+    busy = false;
+  }
+
+  async function geocode(q){
+    var u = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=se&accept-language=sv'
+      +'&viewbox=17.7,59.5,18.4,59.15&q='+encodeURIComponent(q+', Stockholm');
+    var r = await fetch(u); var j = await r.json();
+    if(!j.length) throw new Error('Hittade inte "'+q+'".');
+    return j[0];
+  }
+
+  $('searchForm').addEventListener('submit', async function(ev){
+    ev.preventDefault();
+    var q = $('q').value.trim(); if(!q) return;
+    setStatus('Söker plats…'); showErr(null);
+    try{
+      var hit = await geocode(q);
+      var ll = [parseFloat(hit.lat), parseFloat(hit.lon)];
+      map.setView(ll, 17);
+      if(marker) map.removeLayer(marker);
+      marker = L.marker(ll).addTo(map).bindPopup(hit.display_name.split(',').slice(0,2).join(','));
+      setTimeout(load, 500);
+    }catch(e){ showErr('Adresssökningen misslyckades: '+(e.message||e)+' Panorera kartan manuellt och tryck "Sök i kartvyn".'); setStatus(''); }
+  });
+  $('reload').addEventListener('click', load);
+  $('listDec').addEventListener('click', function(){
+    var feats = raw.forbjuden || [], m = {};
+    feats.forEach(function(f){
+      var p = f.properties || {}, k = p.CITATION || '(saknas)';
+      if(!m[k]) m[k] = {street:{}, n:0};
+      m[k].n++; if(p.STREET_NAME) m[k].street[p.STREET_NAME] = 1;
+    });
+    var lines = Object.keys(m).sort().map(function(k){ return k + ' | ' + Object.keys(m[k].street).join(', ') + ' | ' + m[k].n; });
+    addLog('\nBESLUT I VYN (' + lines.length + '), format: beslut | gata | antal objekt\n' + (lines.join('\n') || '(sök en plats först)'));
+    $('diag').open = true;
+  });
+  $('locate').addEventListener('click', function(){
+    if(!navigator.geolocation){ showErr('Platstjänster saknas i den här webbläsaren.'); return; }
+    navigator.geolocation.getCurrentPosition(function(p){
+      var ll=[p.coords.latitude,p.coords.longitude]; map.setView(ll,17);
+      if(marker) map.removeLayer(marker); marker = L.marker(ll).addTo(map);
+      setTimeout(load,500);
+    }, function(){ showErr('Kunde inte hämta din position.'); }, {enableHighAccuracy:true,timeout:10000});
+  });
+  $('keyToggle').addEventListener('click', function(){ $('keyBox').hidden = !$('keyBox').hidden; });
+  $('keySave').addEventListener('click', function(){
+    var v = $('key').value.trim(); if(!v) return;
+    store.set('apikey', v); $('key').value=''; $('keyBox').hidden = true;
+    setStatus('Nyckel sparad. Hämtar…'); showErr(null);
+    addLog('Nyckel sparad (' + v.length + ' tecken). Webbläsarlagring: ' + (lsOk ? 'fungerar' : 'blockerad'));
+    load();
+  });
+
+  renderToggles(); applyVisibility();
+  if(getKey()) setStatus('Sök en plats, t.ex. Riksdagen.'); else $('keyBox').hidden = false;
+  addLog('Sidan startad. API-nyckel: ' + (getKey() ? 'finns' : 'SAKNAS (skriv in den under API-nyckel och tryck Spara)') + '. Webbläsarlagring: ' + (lsOk ? 'fungerar' : 'blockerad, nyckeln glöms när sidan laddas om') + '.');
+})();
+</script>
+</body>
+</html>
