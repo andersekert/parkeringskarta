@@ -36,6 +36,7 @@ button{font:inherit;cursor:pointer;border:1px solid var(--line);border-radius:10
 button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:600}
 .bar button{box-shadow:0 2px 8px rgba(0,0,0,.18)}
 .sheet{position:absolute;z-index:1000;left:0;right:0;bottom:0;max-width:560px;background:var(--panel);border-top:1px solid var(--line);border-radius:14px 14px 0 0;padding:12px max(14px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left));box-shadow:0 -4px 16px rgba(0,0,0,.18);max-height:55%;overflow:auto}
+.sheet.hidden{display:none}
 .sheet h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;font-weight:600}
 .layers{display:flex;flex-direction:column;gap:4px}
 .layers label{display:flex;align-items:center;gap:8px;min-height:28px}
@@ -63,11 +64,12 @@ details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:1
     <input id="q" type="search" placeholder="Sök plats, t.ex. Riksdagen" autocomplete="off" enterkeyhint="search">
     <button class="primary" type="submit">Sök</button>
     <button type="button" id="locate" title="Min position" aria-label="Min position">⌖</button>
+    <button type="button" id="panelToggle" title="Visa/dölj lager" aria-label="Visa eller dölj lagerpanelen">☰</button>
   </form>
 </div>
 
 <div class="sheet" id="sheet">
-  <h2>Lager</h2>
+  <h2 style="display:flex;align-items:center">Lager<button type="button" id="panelHide" style="margin-left:auto;padding:4px 10px;font-size:13px;text-transform:none;letter-spacing:0">Dölj ▾</button></h2>
   <div class="layers" id="layers"></div>
   <div id="vehBox" hidden><h2 style="margin-top:10px">Typ av förbud (enligt beslutets rubrik)</h2><div class="layers" id="veh"></div></div>
   <p class="status" id="status">Skriv API-nyckel nedan, sök sedan en plats.</p>
@@ -429,6 +431,17 @@ details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:1
   renderToggles(); applyVisibility();
   if(getKey()) setStatus('Sök en plats, t.ex. Riksdagen.'); else $('keyBox').hidden = false;
   addLog('Sidan startad. API-nyckel: ' + (getKey() ? 'finns' : 'SAKNAS (skriv in den under API-nyckel och tryck Spara)') + '. Webbläsarlagring: ' + (lsOk ? 'fungerar' : 'blockerad, nyckeln glöms när sidan laddas om') + '.');
+})();
+</script>
+<script>
+(function(){
+  var sheet = document.getElementById('sheet');
+  function ls(k, v){ try{ if(v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); }catch(e){ return null; } }
+  function set(hidden){ sheet.classList.toggle('hidden', hidden); ls('panel', hidden ? 'hidden' : 'shown'); }
+  document.getElementById('panelToggle').addEventListener('click', function(){ set(!sheet.classList.contains('hidden')); });
+  document.getElementById('panelHide').addEventListener('click', function(){ set(true); });
+  // Dölj bara vid start om nyckel redan finns, annars måste panelen synas för att skriva in den
+  if(ls('panel') === 'hidden' && ls('apikey')) sheet.classList.add('hidden');
 })();
 </script>
 </body>
