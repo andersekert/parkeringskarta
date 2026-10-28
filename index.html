@@ -72,19 +72,11 @@ details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:1
   <h2 style="display:flex;align-items:center">Lager<button type="button" id="panelHide" style="margin-left:auto;padding:4px 10px;font-size:13px;text-transform:none;letter-spacing:0">Dölj ▾</button></h2>
   <div class="layers" id="layers"></div>
   <div id="vehBox" hidden><h2 style="margin-top:10px">Typ av förbud (enligt beslutets rubrik)</h2><div class="layers" id="veh"></div></div>
-  <p class="status" id="status">Skriv API-nyckel nedan, sök sedan en plats.</p>
+  <p class="status" id="status">Sök en plats, t.ex. Riksdagen.</p>
   <div class="err" id="err" hidden></div>
   <div class="row">
     <button type="button" id="reload">Sök i kartvyn</button>
     <button type="button" id="listDec">Lista beslut i vyn</button>
-    <button type="button" id="keyToggle">API-nyckel</button>
-  </div>
-  <div id="keyBox" hidden>
-    <div class="key">
-      <input id="key" type="text" placeholder="API-nyckel från openstreetgs.stockholm.se" autocomplete="off" autocapitalize="off" spellcheck="false">
-      <button type="button" class="primary" id="keySave">Spara</button>
-    </div>
-    <p class="note">Nyckeln sparas bara i den här webbläsaren.</p>
   </div>
   <details id="diag" open><summary>Detaljer</summary><pre id="diagText"></pre></details>
   <p class="note">Visar parkeringsföreskrifter ur Trafikkontorets öppna data. Typen (stannande eller parkering) är avläst ur beslutets rubrik och kan vara fel eller saknas. Tillfälliga regler kan saknas. Gäller alltid skylten på platsen. Nyttotillståndet gäller inte vid stannandeförbud.</p>
@@ -176,7 +168,7 @@ details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:1
   }
 
   function url(name, bbox, fmt){
-    return BASE + encodeURIComponent(getKey()) + '/wfs?service=WFS&version=1.0.0&request=GetFeature&srsName=EPSG:4326&maxFeatures=3000'
+    return BASE + 'wfs?service=WFS&version=1.0.0&request=GetFeature&srsName=EPSG:4326&maxFeatures=3000'
       + '&bbox=' + bbox.join(',') + ',EPSG:4326&typeName=' + encodeURIComponent(name) + fmt;
   }
 
@@ -354,8 +346,7 @@ details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:1
 
   async function load(){
     if(busy) return;
-    addLog('Sök startad. Nyckel: ' + (getKey() ? 'finns' : 'saknas') + ', zoom: ' + map.getZoom());
-    if(!getKey()){ $('keyBox').hidden = false; setStatus('Ange API-nyckel först.'); showErr('API-nyckel saknas. Skriv in den och tryck Spara.'); return; }
+    addLog('Sök startad. Zoom: ' + map.getZoom());
     if(map.getZoom() < 15){ setStatus('Zooma in lite till (minst nivå 15) för att söka i vyn.'); return; }
     busy = true; showErr(null); setStatus('Hämtar…');
     var b = map.getBounds();
@@ -419,18 +410,9 @@ details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:1
       setTimeout(load,500);
     }, function(){ showErr('Kunde inte hämta din position.'); }, {enableHighAccuracy:true,timeout:10000});
   });
-  $('keyToggle').addEventListener('click', function(){ $('keyBox').hidden = !$('keyBox').hidden; });
-  $('keySave').addEventListener('click', function(){
-    var v = $('key').value.trim(); if(!v) return;
-    store.set('apikey', v); $('key').value=''; $('keyBox').hidden = true;
-    setStatus('Nyckel sparad. Hämtar…'); showErr(null);
-    addLog('Nyckel sparad (' + v.length + ' tecken). Webbläsarlagring: ' + (lsOk ? 'fungerar' : 'blockerad'));
-    load();
-  });
 
   renderToggles(); applyVisibility();
-  if(getKey()) setStatus('Sök en plats, t.ex. Riksdagen.'); else $('keyBox').hidden = false;
-  addLog('Sidan startad. API-nyckel: ' + (getKey() ? 'finns' : 'SAKNAS (skriv in den under API-nyckel och tryck Spara)') + '. Webbläsarlagring: ' + (lsOk ? 'fungerar' : 'blockerad, nyckeln glöms när sidan laddas om') + '.');
+  addLog('Sidan startad. Ingen API-nyckel behövs.');
 })();
 </script>
 <script>
@@ -440,8 +422,7 @@ details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:1
   function set(hidden){ sheet.classList.toggle('hidden', hidden); ls('panel', hidden ? 'hidden' : 'shown'); }
   document.getElementById('panelToggle').addEventListener('click', function(){ set(!sheet.classList.contains('hidden')); });
   document.getElementById('panelHide').addEventListener('click', function(){ set(true); });
-  // Dölj bara vid start om nyckel redan finns, annars måste panelen synas för att skriva in den
-  if(ls('panel') === 'hidden' && ls('apikey')) sheet.classList.add('hidden');
+  if(ls('panel') === 'hidden') sheet.classList.add('hidden');
 })();
 </script>
 </body>
