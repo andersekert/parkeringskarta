@@ -78,6 +78,7 @@ details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:1
   <div id="vehBox" hidden><h2 style="margin-top:10px">Typ av förbud (enligt beslutets rubrik)</h2><div class="layers" id="veh"></div></div>
   <p class="status" id="status">Sök en plats, t.ex. Riksdagen.</p>
   <div class="err" id="err" hidden></div>
+  <p class="note" id="hidInfo" hidden><span id="hidTxt"></span> <button type="button" id="hidReset" style="padding:3px 8px;font-size:12px">Visa alla igen</button></p>
   <div class="row">
     <button type="button" id="reload">Sök i kartvyn</button>
     <button type="button" id="listDec">Lista beslut i vyn</button>
@@ -94,6 +95,7 @@ details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:1
   var DEFS = [
     {id:'forbjuden', label:'Förbud mot parkering/stannande', names:['ltfr:LTFR_P_FORBUD_GEOM'], color:'--forbid', on:true},
     {id:'tillaten',  label:'Parkering tillåten',  names:['ltfr:LTFR_P_TILLATEN_GEOM'], color:'--allow', on:true},
+    {id:'trafik',    label:'Förbud mot fordonstrafik / gågata (bil kommer inte fram)', names:['ltfr:LTFR_FORESKRIFT_GEOM'], color:'--block', on:true, dash:'1 7', filter:function(p){ var t = String(p.TITLE || '').toLowerCase().replace(/lokala trafikföreskrifter/, ''); return /förbud mot trafik med (fordon|motordriv|motorfordon)|förbud mot (motor)?fordonstrafik|gågata/.test(t); }},
     {id:'taxa',      label:'Taxeområden',         names:['ltfr:LTFR_TAXA_VIEW'], color:'--taxa', on:false},
     {id:'boende',    label:'Boendeparkering',     names:['ltfr:LTFR_BOENDE'], color:'--boende', on:false, dash:'6 4'},
     {id:'ovrigt',    label:'Övriga föreskrifter (kan innehålla stannandeförbud)', names:['ltfr:LTFR_FORESKRIFT_GEOM'], color:'--other', on:false}
@@ -106,7 +108,7 @@ details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:1
   };
   var PAL = {
     '--forbid':['#c0392b','#ff6b5a'], '--allow':['#1e8e5a','#4fd18c'], '--taxa':['#2a6fb0','#6aaef0'],
-    '--boende':['#d98e04','#f0b73c'], '--other':['#7a4fb0','#b99af0']
+    '--boende':['#d98e04','#f0b73c'], '--other':['#7a4fb0','#b99af0'], '--block':['#1d1d1d','#e0e0e0']
   };
   function colorOf(d){
     var dark = false;
@@ -130,6 +132,11 @@ details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:1
   function getKey(){ return (store.get('apikey')||'').trim(); }
   function maskKey(s){ var k = getKey(); return k ? s.split(k).join('<nyckel>') : s; }
 
+  var hidden = {};
+  try{ hidden = JSON.parse(store.get('hidden') || '{}') || {}; }catch(e){ hidden = {}; }
+  function featKey(p){ p = p || {}; return String(p.CITATION || '') + '|' + String(p.FEATURE_OBJECT_ID || p.FID || ''); }
+  function saveHidden(){ store.set('hidden', JSON.stringify(hidden)); showHidInfo(); }
+  function showHidInfo(){ var n = Object.keys(hidden).length; $('hidInfo').hidden = !n; $('hidTxt').textContent = n + (n === 1 ? ' sträcka dold av dig.' : ' sträckor dolda av dig.'); }
   function setCnt(id, txt){ var e = $('cnt_'+id); if(e) e.textContent = txt; }
   function syncForb(){ byId.forbjuden.on = Object.keys(CLS).some(function(c){ return !clsOff[c]; }); }
   function renderToggles(){
@@ -292,14 +299,23 @@ details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:1
       feats.forEach(function(f){ f._cls = classify(f.properties); });
       shown = feats.filter(function(f){ return !clsOff[f._cls]; });
     }
+    shown = shown.filter(function(f){ return !hidden[featKey(f.properties)]; });
     L.geoJSON({type:'FeatureCollection',features:shown},{
       style:function(f){
         var st = styleFor(d);
+        if(d.id === 'trafik'){ st.weight = 7; st.opacity = .9; st.lineCap = 'round'; }
         if(isF && f._cls){ st.color = clsColor(f._cls); st.fillColor = st.color; st.dashArray = CLS[f._cls].dash; }
         return st;
       },
       pointToLayer:function(f,ll){return L.circleMarker(ll,{radius:7,color:colorOf(d),fillColor:colorOf(d),fillOpacity:.6,weight:2})},
-      onEachFeature:function(f,layer){ layer.bindPopup(popupHtml(f.properties, isF ? f._cls : null), {maxWidth:300}); }
+      onEachFeature:function(f,layer){
+        var el = popupHtml(f.properties, isF ? f._cls : null);
+        if(d.id === 'trafik'){ var w = document.createElement('div'); w.style.cssText = 'margin-bottom:6px;padding:4px 8px;border-radius:6px;color:#fff;font-weight:600;background:#1d1d1d'; w.textContent = 'Trafikförbud/gågata: bil kommer inte fram (läs beslutet för undantag)'; el.insertBefore(w, el.firstChild); }
+        var hb = document.createElement('button'); hb.type = 'button'; hb.textContent = 'Dölj den här sträckan'; hb.style.cssText = 'margin-top:8px;padding:6px 10px;font-size:13px';
+        hb.addEventListener('click', function(){ hidden[featKey(f.properties)] = d.id; saveHidden(); map.closePopup(); draw(d); });
+        el.appendChild(hb);
+        layer.bindPopup(el, {maxWidth:300});
+      }
     }).addTo(groups[d.id]);
     var cnt = $('cnt_'+d.id);
     if(cnt) cnt.textContent = (shown.length === feats.length) ? String(feats.length) : (shown.length + ' av ' + feats.length);
@@ -326,15 +342,17 @@ details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:1
       if(d.id === 'forbjuden'){
         try{ await ensureDec(bbox); }catch(e){ addLog('Typbestämning misslyckades: ' + maskKey(String(e && e.message || e))); }
       }
-      if(d.id === 'ovrigt' && rawKey.ovrigt === key){ all = raw.ovrigt; via = 'cache'; }
+      var useOvr = d.names[0] === byId.ovrigt.names[0];
+      if(useOvr && rawKey.ovrigt === key && raw.ovrigt){ all = raw.ovrigt; via = 'cache'; }
       else{
         for(var i=0;i<d.names.length;i++){
           var res = await getFeatures(d.names[i], bbox);
           via = res.via; all = all.concat(res.features);
         }
+        if(useOvr){ raw.ovrigt = all; rawKey.ovrigt = key; buildDec(); }
       }
+      if(d.filter) all = all.filter(function(f){ return d.filter(f.properties || {}); });
       raw[d.id] = all; rawKey[d.id] = key;
-      if(d.id === 'ovrigt'){ rawKey.ovrigt = key; buildDec(); }
       draw(d);
       if(d.id === 'forbjuden') renderCls();
       addLog(d.label+': '+all.length+' objekt via '+via);
@@ -437,7 +455,8 @@ details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:1
     }, function(){ showErr('Kunde inte hämta din position.'); }, {enableHighAccuracy:true,timeout:10000});
   });
 
-  renderToggles(); applyVisibility();
+  $('hidReset').addEventListener('click', function(){ hidden = {}; saveHidden(); DEFS.forEach(function(d){ if(raw[d.id]) draw(d); }); });
+  renderToggles(); applyVisibility(); showHidInfo();
   addLog('Sidan startad. Ingen API-nyckel behövs.');
 })();
 </script>
