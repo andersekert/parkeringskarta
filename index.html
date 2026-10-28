@@ -458,7 +458,8 @@ details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:1
 
   $('hidReset').addEventListener('click', function(){ hidden = {}; saveHidden(); DEFS.forEach(function(d){ if(raw[d.id]) draw(d); }); if(raw.forbjuden) renderCls(); });
   renderToggles(); applyVisibility(); showHidInfo();
-  addLog('Sidan startad. Ingen API-nyckel behövs.');
+  store.get('x'); try{ localStorage.setItem('_t','1'); localStorage.removeItem('_t'); }catch(e){ lsOk = false; }
+  addLog('Version 7. Sidan startad. Lagring: ' + (lsOk ? 'fungerar' : 'BLOCKERAD (privat läge eller blockerade webbplatsdata), dolda beslut glöms') + '. Dolda beslut: ' + Object.keys(hidden).length + '. Läge: ' + ((window.navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)) ? 'hemskärmsapp' : 'webbläsare') + '.');
 })();
 </script>
 <script>
