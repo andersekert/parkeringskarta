@@ -134,9 +134,10 @@ details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:1
 
   var hidden = {};
   try{ hidden = JSON.parse(store.get('hidden') || '{}') || {}; }catch(e){ hidden = {}; }
-  function featKey(p){ p = p || {}; return String(p.CITATION || '') + '|' + String(p.FEATURE_OBJECT_ID || p.FID || ''); }
+  Object.keys(hidden).forEach(function(k){ if(!/^[bf]:/.test(k)) delete hidden[k]; });
+  function featKey(p){ p = p || {}; var c = String(p.CITATION || '').trim(); return c ? 'b:' + c : 'f:' + String(p.FID || p.FEATURE_OBJECT_ID || ''); }
   function saveHidden(){ store.set('hidden', JSON.stringify(hidden)); showHidInfo(); }
-  function showHidInfo(){ var n = Object.keys(hidden).length; $('hidInfo').hidden = !n; $('hidTxt').textContent = n + (n === 1 ? ' sträcka dold av dig.' : ' sträckor dolda av dig.'); }
+  function showHidInfo(){ var n = Object.keys(hidden).length; $('hidInfo').hidden = !n; $('hidTxt').textContent = n + (n === 1 ? ' beslut dolt av dig.' : ' beslut dolda av dig.'); }
   function setCnt(id, txt){ var e = $('cnt_'+id); if(e) e.textContent = txt; }
   function syncForb(){ byId.forbjuden.on = Object.keys(CLS).some(function(c){ return !clsOff[c]; }); }
   function renderToggles(){
@@ -311,8 +312,8 @@ details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:1
       onEachFeature:function(f,layer){
         var el = popupHtml(f.properties, isF ? f._cls : null);
         if(d.id === 'trafik'){ var w = document.createElement('div'); w.style.cssText = 'margin-bottom:6px;padding:4px 8px;border-radius:6px;color:#fff;font-weight:600;background:#1d1d1d'; w.textContent = 'Trafikförbud/gågata: bil kommer inte fram (läs beslutet för undantag)'; el.insertBefore(w, el.firstChild); }
-        var hb = document.createElement('button'); hb.type = 'button'; hb.textContent = 'Dölj den här sträckan'; hb.style.cssText = 'margin-top:8px;padding:6px 10px;font-size:13px';
-        hb.addEventListener('click', function(){ hidden[featKey(f.properties)] = d.id; saveHidden(); map.closePopup(); draw(d); });
+        var hb = document.createElement('button'); hb.type = 'button'; hb.textContent = 'Dölj (hela beslutet)'; hb.style.cssText = 'margin-top:8px;padding:6px 10px;font-size:13px';
+        hb.addEventListener('click', function(){ hidden[featKey(f.properties)] = d.id; saveHidden(); map.closePopup(); draw(d); if(d.id === 'forbjuden') renderCls(); });
         el.appendChild(hb);
         layer.bindPopup(el, {maxWidth:300});
       }
@@ -322,7 +323,7 @@ details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:1
   }
   function renderCls(){
     var feats = raw.forbjuden || [], counts = {stanna:0, parkera:0, okand:0};
-    feats.forEach(function(f){ counts[f._cls || classify(f.properties)]++; });
+    feats.forEach(function(f){ if(!hidden[featKey(f.properties)]) counts[f._cls || classify(f.properties)]++; });
     Object.keys(CLS).forEach(function(c){ var e = $('ccnt_'+c); if(e) e.textContent = String(counts[c]); });
     addLog('Typ enligt rubrik: stannande ' + counts.stanna + ', parkering ' + counts.parkera + ', okänd ' + counts.okand);
   }
@@ -455,7 +456,7 @@ details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:1
     }, function(){ showErr('Kunde inte hämta din position.'); }, {enableHighAccuracy:true,timeout:10000});
   });
 
-  $('hidReset').addEventListener('click', function(){ hidden = {}; saveHidden(); DEFS.forEach(function(d){ if(raw[d.id]) draw(d); }); });
+  $('hidReset').addEventListener('click', function(){ hidden = {}; saveHidden(); DEFS.forEach(function(d){ if(raw[d.id]) draw(d); }); if(raw.forbjuden) renderCls(); });
   renderToggles(); applyVisibility(); showHidInfo();
   addLog('Sidan startad. Ingen API-nyckel behövs.');
 })();
