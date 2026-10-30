@@ -459,7 +459,9 @@ details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:1
   $('hidReset').addEventListener('click', function(){ hidden = {}; saveHidden(); DEFS.forEach(function(d){ if(raw[d.id]) draw(d); }); if(raw.forbjuden) renderCls(); });
   renderToggles(); applyVisibility(); showHidInfo();
   store.get('x'); try{ localStorage.setItem('_t','1'); localStorage.removeItem('_t'); }catch(e){ lsOk = false; }
-  addLog('Version 7. Sidan startad. Lagring: ' + (lsOk ? 'fungerar' : 'BLOCKERAD (privat läge eller blockerade webbplatsdata), dolda beslut glöms') + '. Dolda beslut: ' + Object.keys(hidden).length + '. Läge: ' + ((window.navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)) ? 'hemskärmsapp' : 'webbläsare') + '.');
+  (function(){ try{ var sp = new URLSearchParams(location.search), la = parseFloat(sp.get('lat')), lo = parseFloat(sp.get('lon'));
+    if(isFinite(la) && isFinite(lo) && Math.abs(la) <= 90 && Math.abs(lo) <= 180){ map.setView([la, lo], 17); marker = L.marker([la, lo]).addTo(map).bindPopup('Plats från länk'); lastPlace = 'plats från länk'; setTimeout(load, 500); } }catch(e){} })();
+  addLog('Version 8. Sidan startad. Lagring: ' + (lsOk ? 'fungerar' : 'BLOCKERAD (privat läge eller blockerade webbplatsdata), dolda beslut glöms') + '. Dolda beslut: ' + Object.keys(hidden).length + '. Läge: ' + ((window.navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)) ? 'hemskärmsapp' : 'webbläsare') + '.');
 })();
 </script>
 <script>
