@@ -9,51 +9,52 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Parkering">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#1f5f4a">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme:light)">
+<meta name="theme-color" content="#111111" media="(prefers-color-scheme:dark)">
+<link rel="stylesheet" href="/profil/v1.css">
 <title>Parkeringskarta Stockholm</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
 :root{
-  --bg:#f4f5f2; --panel:#ffffff; --fg:#1d2420; --muted:#5d6862; --line:#d9ddd6;
-  --accent:#1f5f4a; --accent-fg:#ffffff;
+  --bg:var(--paper); --panel:var(--paper); --fg:var(--ink); --muted:var(--ink-soft);
+  --accent:var(--ink); --accent-fg:var(--paper);
   --forbid:#c0392b; --allow:#1e8e5a; --taxa:#2a6fb0; --boende:#d98e04; --other:#7a4fb0;
   --warn-bg:#fff3d6; --warn-fg:#5a4300;
 }
 @media (prefers-color-scheme:dark){:root{
-  --bg:#121614; --panel:#1c211e; --fg:#e8ece9; --muted:#9aa59f; --line:#2f3732;
-  --accent:#5fc3a0; --accent-fg:#0d1511;
   --forbid:#ff6b5a; --allow:#4fd18c; --taxa:#6aaef0; --boende:#f0b73c; --other:#b99af0;
   --warn-bg:#3a2f10; --warn-fg:#f2d98a;
 }}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
-body{font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--fg);overflow:hidden}
+body{font:16px/1.4 var(--font);background:var(--bg);color:var(--fg);overflow:hidden}
 #map{position:absolute;inset:0}
 .top{position:absolute;z-index:1000;top:0;left:0;right:0;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) 0 max(10px,env(safe-area-inset-left));pointer-events:none}
 .bar{display:flex;gap:6px;pointer-events:auto;max-width:560px}
-.bar input{flex:1;min-width:0;font:inherit;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--fg);box-shadow:0 2px 8px rgba(0,0,0,.18)}
-button{font:inherit;cursor:pointer;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--fg);padding:10px 12px}
-button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:600}
-.bar button{box-shadow:0 2px 8px rgba(0,0,0,.18)}
-.sheet{position:absolute;z-index:1000;left:0;right:0;bottom:0;max-width:560px;background:var(--panel);border-top:1px solid var(--line);border-radius:14px 14px 0 0;padding:12px max(14px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left));box-shadow:0 -4px 16px rgba(0,0,0,.18);max-height:55%;overflow:auto}
+.bar input{flex:1;min-width:0;font:inherit;padding:12px 14px;border:1px solid var(--ink);background:var(--panel);color:var(--fg);}
+button{font:inherit;min-height:44px;cursor:pointer;border:1px solid var(--ink);background:var(--panel);color:var(--fg);padding:10px 12px}
+button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:700}
+.bar button{}
+.sheet{position:absolute;z-index:1000;left:0;right:0;bottom:0;max-width:560px;background:var(--panel);border-top:1px solid var(--ink);padding:12px max(14px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left));max-height:55%;overflow:auto}
 .sheet.hidden{display:none}
-.hits{pointer-events:auto;max-width:560px;margin-top:6px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.18);font-size:13px;overflow:hidden}
+.hits{pointer-events:auto;max-width:560px;margin-top:6px;background:var(--panel);border:1px solid var(--line);font-size:13px;overflow:hidden}
 .hits button{display:block;width:100%;text-align:left;border:0;border-top:1px solid var(--line);border-radius:0;padding:9px 12px;background:transparent}
 .hits .hl{padding:7px 12px;color:var(--muted)}
-.sheet h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;font-weight:600}
+.sheet h2{font-size:14px;letter-spacing:0;line-height:1.4;color:var(--muted);margin:0 0 8px;font-weight:500}
+.sheet .e-top{margin-bottom:8px;min-height:0}
 .layers{display:flex;flex-direction:column;gap:4px}
 .layers label{display:flex;align-items:center;gap:8px;min-height:28px}
-.sw{display:inline-block;width:14px;height:14px;min-width:14px;min-height:14px;border-radius:3px;flex:none;border:1px solid rgba(0,0,0,.25)}
+.sw{display:inline-block;width:14px;height:14px;min-width:14px;min-height:14px;flex:none;border:1px solid rgba(0,0,0,.25)}
 .cnt{margin-left:auto;color:var(--muted);font-variant-numeric:tabular-nums;font-size:13px}
 .status{margin:8px 0 0;color:var(--muted);font-size:13px}
-.err{margin:8px 0 0;padding:8px 10px;border-radius:8px;background:var(--warn-bg);color:var(--warn-fg);font-size:13px}
+.err{margin:8px 0 0;padding:8px 10px;background:var(--warn-bg);color:var(--warn-fg);font-size:13px}
 .row{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
 .key{display:flex;gap:6px;margin-top:6px}
-.key input{flex:1;min-width:0;font:inherit;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)}
+.key input{flex:1;min-width:0;font:inherit;padding:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
 details{margin-top:8px;font-size:13px;color:var(--muted)}
 details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:12px}
 .note{font-size:12px;color:var(--muted);margin:8px 0 0}
-.leaflet-popup-content{font:13px/1.4 system-ui,sans-serif;margin:10px 12px}
+.leaflet-popup-content{font:13px/1.4 var(--font);margin:10px 12px}
 .leaflet-popup-content table{border-collapse:collapse}
 .leaflet-popup-content td{padding:1px 8px 1px 0;vertical-align:top;word-break:break-word}
 .leaflet-popup-content td:first-child{color:#666}
@@ -73,7 +74,8 @@ details pre{white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:1
 </div>
 
 <div class="sheet" id="sheet">
-  <h2 style="display:flex;align-items:center">Lager<button type="button" id="panelHide" style="margin-left:auto;padding:4px 10px;font-size:13px;text-transform:none;letter-spacing:0">Dölj ▾</button></h2>
+  <div class="e-top"><span><a class="e-mark" href="/">ekert</a> / Parkeringskarta</span></div>
+  <h2 style="display:flex;align-items:center">Lager<button type="button" id="panelHide" style="margin-left:auto;padding:4px 10px;font-size:14px">Dölj ▾</button></h2>
   <div class="layers" id="layers"></div>
   <div id="vehBox" hidden><h2 style="margin-top:10px">Typ av förbud (enligt beslutets rubrik)</h2><div class="layers" id="veh"></div></div>
   <p class="status" id="status">Sök en plats, t.ex. Riksdagen.</p>
